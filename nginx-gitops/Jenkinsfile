@@ -2,30 +2,39 @@ pipeline {
     agent any
 
     environment {
-        DOCKERHUB_CREDENTIALS = 'dockerhub-creds'   // Jenkins credentials ID
-        DOCKERHUB_REPO = 'namita850/public-repo'      // Docker Hub repo
-        IMAGE_TAG = "${env.BUILD_NUMBER}"           // Unique image tag per build
+        DOCKERHUB_CREDENTIALS = 'dockerhub-creds'
+        DOCKERHUB_REPO = 'namita850/public-repo'
+        IMAGE_TAG = "${env.BUILD_NUMBER}"
     }
 
     stages {
+
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/ynamita/argocd-jenkins-project.git'
+                git branch: 'main',
+                    url: 'https://github.com/ynamita/argocd-jenkins-project.git'
             }
         }
 
         stage('Build Docker Image') {
             steps {
-               dir('nginx-gitops'){
-                sh "docker build -t ${DOCKERHUB_REPO}:${IMAGE_TAG} ."
+                dir('nginx-gitops') {
+                    sh 'ls -l'
+                    sh "docker build -t ${DOCKERHUB_REPO}:${IMAGE_TAG} ."
+                }
             }
         }
-      }
 
         stage('Login to Docker Hub') {
             steps {
-                withCredentials([usernamePassword(credentialsId: "${DOCKERHUB_CREDENTIALS}", usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
-                    sh "echo $PASSWORD | docker login -u $USERNAME --password-stdin"
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: DOCKERHUB_CREDENTIALS,
+                        usernameVariable: 'USERNAME',
+                        passwordVariable: 'PASSWORD'
+                    )
+                ]) {
+                    sh 'echo $PASSWORD | docker login -u $USERNAME --password-stdin'
                 }
             }
         }
@@ -38,23 +47,20 @@ pipeline {
 
         stage('Logout from Docker Hub') {
             steps {
-                sh "docker logout"
+                sh 'docker logout'
             }
         }
 
-        stage('Update Deployment') {
+        stage('Update Deployment (GitOps trigger)') {
             steps {
-                script {
-                    // Update deployment YAML with new image tag
-                    sh "sed -i 's|image: ${DOCKERHUB_REPO}:.*|image: ${DOCKERHUB_REPO}:${IMAGE_TAG}|' k8s/nginx-deployment.yaml"
-                    
-                    // Commit & push to GitHub so Argo CD can deploy
+                dir('nginx-gitops') {
                     sh """
-                        git config user.email "jenkins@example.com"
-                        git config user.name "Jenkins-CI"
-                        git add k8s/nginx-deployment.yaml
-                        git commit -m "Update Nginx image to ${IMAGE_TAG}"
-                        git push origin main
+                      sed -i 's|image: .*|image: ${DOCKERHUB_REPO}:${IMAGE_TAG}|' k8s/nginx-deployment.yaml
+                      git config user.email "jenkins@example.com"
+                      git config user.name "Jenkins-CI"
+                      git add k8s/nginx-deployment.yaml
+                      git commit -m "Update nginx image to ${IMAGE_TAG}"
+                      git push origin main
                     """
                 }
             }
