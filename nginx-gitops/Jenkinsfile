@@ -3,6 +3,7 @@ pipeline {
 
     environment {
         DOCKERHUB_CREDENTIALS = 'dockerhub-creds'
+        GITHUB_CREDENTIALS   = 'Git-hub-cred'
         DOCKERHUB_REPO = 'namita850/public-repo'
         IMAGE_TAG = "${env.BUILD_NUMBER}"
     }
@@ -12,6 +13,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 git branch: 'main',
+                    credentialsId: GITHUB_CREDENTIALS,
                     url: 'https://github.com/ynamita/argocd-jenkins-project.git'
             }
         }
@@ -54,14 +56,22 @@ pipeline {
         stage('Update Deployment (GitOps trigger)') {
             steps {
                 dir('nginx-gitops') {
-                    sh """
-                      sed -i 's|image: .*|image: ${DOCKERHUB_REPO}:${IMAGE_TAG}|' k8s/nginx-dep.yaml
-                      git config user.email "jenkins@example.com"
-                      git config user.name "Jenkins-CI"
-                      git add k8s/nginx-dep.yaml
-                      git commit -m "Update nginx image to ${IMAGE_TAG}"
-                      git push origin main
-                    """
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: GITHUB_CREDENTIALS,
+                            usernameVariable: 'GIT_USER',
+                            passwordVariable: 'GIT_TOKEN'
+                        )
+                    ]) {
+                        sh """
+                          sed -i 's|image: .*|image: ${DOCKERHUB_REPO}:${IMAGE_TAG}|' k8s/nginx-dep.yaml
+                          git config user.email "jenkins@example.com"
+                          git config user.name "Jenkins-CI"
+                          git add k8s/nginx-dep.yaml
+                          git commit -m "Update nginx image to ${IMAGE_TAG}" || echo "No changes"
+                          git push https://${GIT_USER}:${GIT_TOKEN}@github.com/ynamita/argocd-jenkins-project.git main
+                        """
+                    }
                 }
             }
         }
