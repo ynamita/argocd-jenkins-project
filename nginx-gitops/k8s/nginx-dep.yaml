@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: nginx
-        image: namita850/nginx-demo:1.0   # Jenkins updates this tag
+        image: namita850/public-repo:1   # Jenkins updates this tag
         ports:
         - containerPort: 80
 
